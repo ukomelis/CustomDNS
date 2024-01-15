@@ -27,23 +27,40 @@ class Program
 
     static void RunServer(int port)
     {
-        // Set up a UDP client
-        var udpClient = new UdpClient(port); // Listen on specified port
+        //Console.WriteLine(Dns.GetHostEntry("www.google.com").AddressList[0]);
+
+        // Set up a UDP client for listening
+        var listenClient = new UdpClient(port); // Listen on specified port
         Console.WriteLine($"Listening on port {port}...");
+
         try
         {
             while (true)
             {
                 // Listen for incoming data
                 var remoteEP = new IPEndPoint(IPAddress.Any, 0);
-                var data = udpClient.Receive(ref remoteEP);
+                var data = listenClient.Receive(ref remoteEP);
 
-                // Print the raw received data
-                Console.WriteLine($"Received data: {BitConverter.ToString(data)}");
+                Console.WriteLine($"Received DNS query from {remoteEP}:");
+                Console.WriteLine(ParseDnsQuery(data));
 
-                // Parse the DNS query and display it
-                var message = ParseDnsQuery(data);
-                Console.WriteLine($"Received: {message}");
+                // Set up a UDP client for forwarding
+                using var forwardClient = new UdpClient();
+
+                // Forward the DNS query to Google's public DNS server
+                var googleDnsEp = new IPEndPoint(IPAddress.Parse("8.8.8.8"), 53);
+                forwardClient.Send(data, data.Length, googleDnsEp);
+
+                // Receive the DNS response from Google's public DNS server
+                var googleDnsResponse = forwardClient.Receive(ref googleDnsEp);
+                Console.WriteLine($"Received DNS response from google {googleDnsEp}:");
+                Console.WriteLine(ParseDnsQuery(googleDnsResponse));
+
+                var serverIp = ParseIpFromDnsResponse(googleDnsResponse);
+                Console.WriteLine($"Server IP: {serverIp}");
+
+                // Send the DNS response back to the original client
+                forwardClient.Send(googleDnsResponse, googleDnsResponse.Length, remoteEP);
             }
         }
         catch (SocketException ex)
@@ -52,8 +69,32 @@ class Program
         }
         finally
         {
-            udpClient.Close();
+            listenClient.Close();
         }
+    }
+
+    public static string ParseIpFromDnsResponse(byte[] bytes)
+    {
+        var index = 12; // Skip the header
+
+        // Skip the question section
+        while (bytes[index] != 0)
+            index++;
+        index += 5; // Skip the type and class
+
+        // Skip until we find an answer (indicated by 0xC0)
+        while (bytes[index] != 0xC0)
+            index++;
+        index += 2; // Skip the pointer
+
+        // Skip the type, class, and TTL
+        index += 10;
+
+        // The next four bytes are the IP address
+        var ip = new byte[4];
+        Array.Copy(bytes, index, ip, 0, 4);
+
+        return new IPAddress(ip).ToString();
     }
 
     public static string ParseDnsQuery(byte[] bytes)
