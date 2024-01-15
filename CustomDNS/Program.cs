@@ -38,6 +38,9 @@ class Program
                 var remoteEP = new IPEndPoint(IPAddress.Any, 0);
                 var data = udpClient.Receive(ref remoteEP);
 
+                // Print the raw received data
+                Console.WriteLine($"Received data: {BitConverter.ToString(data)}");
+
                 // Parse the DNS query and display it
                 var message = ParseDnsQuery(data);
                 Console.WriteLine($"Received: {message}");
@@ -49,15 +52,28 @@ class Program
         }
         finally
         {
-            // Always close the UDP client when done
             udpClient.Close();
         }
     }
 
     public static string ParseDnsQuery(byte[] bytes)
     {
-        // Skip the transaction ID
-        int index = 2;
+        var index = 0;
+
+        // Read the transaction ID
+        var transactionId = BitConverter.ToString(bytes, index, 2);
+        index += 2;
+
+        // Read the flags
+        var flags = BitConverter.ToString(bytes, index, 2);
+        index += 2;
+
+        // Read the question count
+        var questionCount = BitConverter.ToString(bytes, index, 2);
+        index += 2;
+
+        // Skip the answer, authority, and additional counts
+        index += 6;
 
         // Read the domain name
         var domain = new StringBuilder();
@@ -79,6 +95,16 @@ class Program
             }
         }
 
-        return domain.ToString();
+        // Skip the zero byte at the end of the domain name
+        index++;
+
+        // Read the type
+        string type = BitConverter.ToString(bytes, index, 2);
+        index += 2;
+
+        // Read the class
+        var class_ = BitConverter.ToString(bytes, index, 2);
+
+        return $"Transaction ID: {transactionId}, Flags: {flags}, Question Count: {questionCount}, Domain: {domain}, Type: {type}, Class: {class_}";
     }
 }

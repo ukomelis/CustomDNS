@@ -26,7 +26,7 @@ class Program
         try
         {
             // Construct a DNS query for the specified URL
-            var message = new DnsQuery(url).ToByteArray();
+            var message = new DnsQuery(url).ToDnsRequestByteArray();
             udpClient.Send(message, message.Length, "localhost", port);
 
             Console.WriteLine($"Sent DNS query for {url}");
@@ -43,7 +43,7 @@ class Program
     }
 }
 
-public class DnsQuery
+class DnsQuery
 {
     private readonly string domain;
 
@@ -52,14 +52,30 @@ public class DnsQuery
         this.domain = domain;
     }
 
-    public byte[] ToByteArray()
+    public byte[] ToDnsRequestByteArray()
     {
         // Start with a list to hold all the bytes
-        List<byte> queryBytes = new List<byte>();
-
-        // Add a transaction ID
-        queryBytes.Add(0xAB);
-        queryBytes.Add(0xCD);
+        List<byte> queryBytes =
+        [
+            // Add a transaction ID
+            0xAB,
+            0xCD,
+            // Add flags: standard query, recursion desired
+            0x01,
+            0x00,
+            // Add question count: 1
+            0x00,
+            0x01,
+            // Add answer count: 0
+            0x00,
+            0x00,
+            // Add authority count: 0
+            0x00,
+            0x00,
+            // Add additional count: 0
+            0x00,
+            0x00,
+        ];
 
         // Split the domain into parts
         var parts = domain.Split('.');
@@ -78,6 +94,14 @@ public class DnsQuery
 
         // Add a zero byte to end the domain name
         queryBytes.Add(0);
+
+        // Add type: A
+        queryBytes.Add(0x00);
+        queryBytes.Add(0x01);
+
+        // Add class: IN
+        queryBytes.Add(0x00);
+        queryBytes.Add(0x01);
 
         return queryBytes.ToArray();
     }
